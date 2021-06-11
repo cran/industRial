@@ -1,0 +1,24 @@
+
+# (PART) APPENDIX {-}
+
+# Index {#contents}
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(readr)
+library(dplyr)
+library(kableExtra)
+knitr::opts_chunk$set(options(knitr.kable.NA = ''))
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+read_delim(here::here("inst/book/contents.csv"), 
+    ",", escape_double = FALSE, trim_ws = TRUE) %>%
+  select(Subject, Unit, Functions, Datasets) %>%
+  kable(align = "l") %>%
+  row_spec(row = 1:65, background = "white") %>%
+  row_spec(
+    row = c(1, 7, 13, 56),
+    background = "#e6e6e6", color = "#104e8b", bold = TRUE
+    )
+```
+

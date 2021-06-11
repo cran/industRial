@@ -1,0 +1,239 @@
+---
+title: "industRial practice"
+output: 
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+runtime: shiny_prerendered
+description: > 
+  Practice applications of process capability in statiscal process control to gain
+  understanding of how the out of specification is calculated
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(learnr)
+# battery_charging <- write_rds(battery_charging, "battery_charging.rds")
+battery_charging <- readr::read_rds("battery_charging.rds")
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+# Design of Experiments - Response Surface Methods
+
+## Review: design output plots
+
+There are multiple plots to visualize the information coming out of a well designed experiment. These can show simply one of the output variables but it is possible and often necessary to go much further to see how variables relate to each other and how solid the design finally is.
+
+## Question: design output plots
+
+```{r quizz-doeplots}
+question_checkbox(
+  "What kind of plots can be established from a DoE data?",
+  answer("Raw data scatter plots.", correct = TRUE),
+  answer("Residuals qq plot.", correct = TRUE),
+  answer("Residuals timeseries.", correct = TRUE),
+  answer("Main effects plots.", correct = TRUE),
+  answer("Interaction plots.", correct = TRUE),
+  answer("Response surface plots", correct = TRUE),
+  answer("Contour plots.", correct = TRUE),
+  answer("Parliament plots.", FALSE, message = "Parliament plots are used to represent the share of seats in a parliament usualy with nice colors and pictograms. Their utilization in DOEs is still to be seen!"),
+  random_answer_order = TRUE,
+  allow_retry = TRUE
+)
+```
+
+## Exercise: linear model
+
+There are several packages in R to establish 3D plots although they may be generic such as `{plot3D}` or related with cartography such as `{rayshader}`. In the domain of the design of experiments the `{rsm}` package brings some specific advantages such as building the surface plots directly from the design models.
+
+In this exercise we're then going to prepare the model for out surface plot. We're going to use the battery_charging dataset of which we're showing below the first 5 lines:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+battery_charging %>%
+  head()
+```
+
+Use all the 4 entry variables to establish a linear model of the charging time:
+
+```{r model, exercise=TRUE, exercise.lines = 5, exercise.eval=FALSE}
+battery_lm <- lm(
+  
+)
+summary(battery_lm)
+```
+
+```{r model-hint}
+# An lm function takes a dataset and a formula expressed with ~ 
+# Checking ?lm and ?formula gives many details of the syntax
+# The adjusted R-squared of the full model it should be 0.3832 (not great)
+```
+
+## Play: surface app
+
+Surface response plots give a clear idea of what the interaction plots are: in the interaction plots we see the front and back edges of the surface, when the input factor is either at its min or at its max. If the lines cross each other we can see its because the surface is bent. In this case we say there is an interaction and the p value on the interaction term goes beyond 0.05.
+
+Check out this situation with the inputs A and C, what is the interaction p value? What about A-B and BC?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(stats)
+library(rsm)
+library(viridis)
+library(DT)
+library(broom)
+fluidPage(
+  titlePanel("Response surface app"),
+  sidebarLayout(
+    sidebarPanel(width = 3,
+
+      radioButtons(
+        inputId = "selected_variables",
+        label = "Select the input variables",
+        choices = c("A and B" = "ab", "A and C" = "ac", "B and C" = "bc"),
+        selected = "ac"
+      ),
+      sliderInput("theta", "Theta", min = -75, max = -20, value = -40),
+      sliderInput("phi", "Phi", min = 0, max = 50, value = 20),
+      sliderInput("r", "R", min = 2, max = 5, value = 5)
+    ),
+    mainPanel(
+      fluidRow(
+        column(6, plotOutput("response_surface")),
+        column(6, plotOutput("interaction_plot"))
+      ),
+      fluidRow(
+        column(2),
+        column(10, 
+               tags$b("Linear model summary"),
+               DTOutput("linear_model"))
+      )
+    )
+  )
+)
+```
+
+```{r context="server"}
+  model_formula <- reactive({
+    if (input$selected_variables == "ab") {
+      model_formula = charging_time ~ A + B + A:B
+    } else if (input$selected_variables == "ac") {
+      model_formula = charging_time ~ A + C + A:C
+    } else if (input$selected_variables == "bc") {
+      model_formula = charging_time ~ B + C + B:C
+    }
+  }) 
+  
+  model_view <- reactive({
+    if (input$selected_variables == "ab") {
+      model_view = A ~ B
+    } else if (input$selected_variables == "ac") {
+      model_view = A ~ C
+    } else if (input$selected_variables == "bc") {
+      model_view = B ~ C
+    }
+  })
+    
+  
+  interaction_factors <- reactive({
+    if (input$selected_variables == "ab") {
+        interaction_factors <- list()
+        interaction_factors$x.factor <- battery_charging$B
+        interaction_factors$trace.factor <- battery_charging$A
+        interaction_factors$xlab <- "B"
+        interaction_factors$trace.label <- "A"
+    } else if (input$selected_variables == "ac") {
+        interaction_factors <- list()
+        interaction_factors$x.factor <- battery_charging$C
+        interaction_factors$trace.factor <- battery_charging$A
+        interaction_factors$xlab <- "C"
+        interaction_factors$trace.label <- "A"
+    } else if (input$selected_variables == "bc") {
+        interaction_factors <- list()
+        interaction_factors$x.factor <- battery_charging$C
+        interaction_factors$trace.factor <- battery_charging$B
+        interaction_factors$xlab <- "C"
+        interaction_factors$trace.label <- "B"
+    }
+    interaction_factors
+  })
+  
+  model <- reactive({
+    battery_lm <- lm(
+      formula = model_formula(),
+      data = battery_charging
+    )
+  })
+  
+  output$response_surface <- renderPlot(
+    persp(
+      model(),
+      model_view(),
+      col = viridis(12)[8],
+      contours = "col",
+      bounds = list(A = c(-1,1), C = c(-1,1)),
+      theta = input$theta, phi = input$phi, r = input$r,
+      zlab = "Charging Time",
+      main = "Response surface"
+    )
+  )
+  
+  output$interaction_plot <- renderPlot(
+    interaction.plot(x.factor = interaction_factors()$x.factor,
+                     trace.factor = interaction_factors()$trace.factor,
+                     fun = mean,
+                     response = battery_charging$charging_time,
+                     legend = TRUE,
+                     xlab =  {interaction_factors()$xlab},
+                     trace.label = {interaction_factors()$trace.label},
+                     ylab = "Charging Time",
+                     lwd = 2,
+                     main = "Interaction plot")
+  )
+  
+  output$linear_model <- renderDT({
+    model() %>%
+      tidy() %>%
+      datatable(
+        options = list(dom = 't')
+        ) %>%
+      formatRound(columns = c(2:5), digits = 2)
+  })
+```
+
+## Exercise: reduced model
+
+As we could see several terms and interactions are non significative so a model with a better adjustment to the date can be prepared by removing them. This should in principle even improve the adjusted R-square. What is the adjusted R-square for a model with just the C factor and its interaction with A?
+
+
+```{r reduced-model, exercise=TRUE, exercise.lines = 5}
+battery_reduced_lm <- lm(
+
+  )
+summary(battery_reduced_lm)
+```
+
+```{r reduced-model-hint}
+# An lm function takes a dataset and a formula expressed with ~ 
+# Checking ?lm and ?formula gives many details of the syntax
+# The adjusted R-squared of the full model it should be 0.455 (still not great...)
+```
+
+## Quizz: adjusted R-square
+
+We end this tutorial with a slightly advanced topic, still recurrent in design of experiments and important to decide which factors to take into account: to choose between different models and select which factors to keep the Adjusted R2 is more appropriate than the Multiple R-squared.
+
+```{r quizz-cpk, echo = FALSE}
+question(
+  "Why using the adjusted R-square to compare models and choose which factors to keep?",
+  answer("Because the factors are coded as +/- 1", correct = FALSE, message = "Factors coding doesn't affect the R-square neither the adjusted R-square even if the contrasts are not correctly set."),
+  answer("Because R-squared keeps increasing even if non significant levels are added to the model.", correct = TRUE),
+  answer("Because the number of input factors is greater than 3.", correct = FALSE, message = "The R-squared can be calculated with any number of input factors."),
+  answer("Because the p value is greater than 0.05", correct = FALSE, message = "The p value gives an indication of the significance of each individual factor and interaction."),
+  random_answer_order = TRUE,
+  allow_retry = TRUE
+)
+```
+
+There's a good wikipedia article on the topic:
+[adjusted R-squared](https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2)
+
+

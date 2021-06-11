@@ -1,0 +1,23 @@
+book_filename: "industRial"
+new_session: yes
+delete_merged_file: true
+language:
+  ui:
+    chapter_name: "Chapter "
+output_dir: "../../docs"
+
+rmd_files: [
+  "index.Rmd",
+  "2_toolbox.Rmd",
+  "3_sixsigma.Rmd",
+  "4_msa.Rmd",
+  "5_comparisons.Rmd",
+  "6_models.Rmd",
+  "7_effects.Rmd",
+  "8_generalDOEs.Rmd",
+  "9_twolevelDOEs.Rmd",
+  "10_spc.Rmd",
+  "11_contents.Rmd",
+  "12_glossary.Rmd",
+  "13_references.Rmd"
+]

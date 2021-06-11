@@ -1,0 +1,222 @@
+---
+title: "industRial practice"
+output: 
+  learnr::tutorial:
+    progressive: true
+    allow_skip: true
+runtime: shiny_prerendered
+description: > 
+  Practice applications of process capability in statiscal process control to gain
+  understanding of how the out of specification is calculated
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(janitor)
+library(stats)
+library(gt)
+library(learnr)
+source("theme_qcc.R")
+source("chart_Cpk.R")
+source("process_stats.R")
+source("process_stats_table.R")
+source("off_spec.R")
+source("process_Cpk.R")
+filter <- dplyr::filter
+select <- dplyr::select
+tablet_weight <- read_rds("tablet_weight.rds")
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+# Statistical Process Control - Process Capability
+
+## Review: specs and process control
+
+To get a new industrial product to the market there is often a long process that goes from the initial discussions and briefings to the start of production on the shop floor. For products produced in millions or billions of units this process can take several years but once its completed the specifications often remain stable for years.
+
+This is why it is important to assess the capability of the manufacturing processes and to define good specifications from the start. For the characteristics that are critical to quality (CTQ) we may decide to implement a statistical process control (SPC).
+
+## Question: capability indexes
+
+Quality control is know for its many acronyms (we've just seen already seen CTQ, SPC). Would you know some more?
+
+
+```{r cpk-question, echo = FALSE}
+question(
+  "Write down the acronyms of upper control limit, lower control limit, upper specification limit, lower specification limit, parts per million, standard operating procedure.",
+  answer("UCL,LCL,USL,LSL,PPM,SOP", correct = TRUE),
+  type = "learnr_text",
+  try_again = "Use capitals, separated by a comma and no spaces (e.g: CTQ,SPC,...).",
+  post_message = "Well done.",
+  allow_retry = TRUE,
+  options = list(
+    placeholder = "USL,...",
+    trim = TRUE
+  )
+)
+```
+
+## Exercise: summary statistics
+
+For this exercise we've loaded the {industRial} package in memory with library(industRial). It comes with various simple functions in the area of SPC that can be used as a starting point to build dashboards and advanced applications, e.g. off_spec() and process_Cpk(). How can we easily check the arguments that the functions take? 
+
+```{r arguments, exercise=TRUE, exercise.lines = 5, exercise.eval=FALSE}
+
+```
+
+```{r arguments-hint}
+dput(formals(process_Cpk))
+```
+
+It was useful to see in the previous question what USL means!
+
+What about if we wanted to see the code inside the function? We're giving a hint but better workout your memory before!
+
+```{r body, exercise=TRUE, exercise.lines = 5, exercise.eval=FALSE}
+
+```
+
+```{r body-hint}
+body(process_Cpk)
+```
+
+As said its a rather simple function but it proves very helpful if we know the specification limits, the process mean and its standard deviation.
+
+## Play: capability app
+
+Lets now try all these ideas together in a dynamic context. In the app below the specification limits are calculated as a percentage of the specification target, starting with 10%. This means that for a target of 0.90 we have a min of 0.81 and a max of 0.99 [g]. In these circumstances the percentage out of specification is of 2.39%, very high for industry standards.
+
+Check the following points below:
+
+
+* Could we get to zero defects in percentage just by re-centering the process? By how much (in grams).
+* How much is the Cpk in this case?
+* Could we further narrow the specification below 10% and still have zero % out of spec?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+fluidPage(
+  titlePanel("Process Capability Study"),
+
+    fluidRow(
+      column(6, plotOutput("capability_chart")), 
+      column(6, gt_output("statistics_table")
+      )
+      ),
+    fluidRow(
+      # column(3),
+      column(3,
+        sliderInput(
+          width = 150,
+          "spec_perc",
+          "Specification tolerance [%]",
+          min = 1,
+          max = 16,
+          value = 9,
+          step = 1
+        )
+      ),
+      column(3,
+        sliderInput(
+          width = 150,
+          "spec_deviation",
+          "Specification deviation [g]",
+          min = -0.1,
+          max = +0.2,
+          value = 0.0,
+          step = 0.01
+        )
+      )
+      )
+)
+```
+
+```{r context="server"}
+  tablet_weight_clean <- reactive({
+    tablet_weight %>%
+      janitor::clean_names(case = "snake") %>%
+      mutate(weight_target_value = weight_target_value + input$spec_deviation)
+  })
+  
+  weight_statistics_data <- reactive({
+    process_stats(
+      data = tablet_weight_clean(), 
+      part_spec_percent = input$spec_perc
+    )
+  })
+  
+  weight_normal <- reactive({
+    stats::rnorm(
+    n = 100000,
+    mean = mean(weight_statistics_data() %>% pull(weight_mean)),
+    sd = mean(weight_statistics_data() %>% pull(weight_sd))
+    ) %>%
+    as_tibble()
+  })
+  
+  output$capability_chart <- renderPlot({
+
+    chart_Cpk(weight_statistics_data()) +
+    ggplot2::geom_density(
+      data = weight_normal(),
+      ggplot2::aes(x = value), linetype = 2
+    ) +
+      expand_limits(x = c(0.7, 1.1)) 
+  })
+  
+  output$statistics_table <- render_gt({
+
+    process_stats_table(weight_statistics_data()) %>%
+      gt::fmt_number(columns = 2, decimals = 2) %>%
+      gt::fmt_number(columns = 2, rows = Variable == "Sample size", decimals = 0)
+
+  })
+```
+
+## Exercise: histogram
+
+Finally a process capability chart is nothing more than our old histogram:
+
+```{r echo=FALSE}
+tablet_weight %>%
+  clean_names() %>%
+  ggplot(aes(x = weight_value)) +
+  geom_histogram(fill = "grey80", color = "grey20") +
+  labs(
+    title = "Tablet weight process control",
+    subtitle = "Process Capability chart",
+    x = "Part Weight [g]",
+    y = "Count",
+    caption = "data source: Line1"
+  ) +
+  theme_qcc()
+```
+
+Enter below the code to obtain this histogram, using the tablet_weight data set:
+
+```{r histogram, exercise=TRUE, exercise.lines = 5, exercise.eval=FALSE}
+tablet_weight %>%
+  clean_names()
+```
+
+```{r histogram-hint}
+# Check out the chart_Cpk() function body, although there is more than a simple histogram the base is the same:
+body(chart_Cpk)
+```
+
+
+## Quizz: Cpk formula
+
+There are many different ways of expressing the process capability with various indexes that all resemble a bit. We've mostly been looking into the Cpk which takes into account the off centering of the process. From the function explored before we can now find out its mathematical formula.
+
+```{r quizz-cpk, echo = FALSE}
+question(
+  "What is the exact mathematical formula to calculate the Cpk? (sd corresponds to the process standard deviation and sdLT to the long term standard deviation).",
+  answer("(USL-LSL)/6sd", correct = FALSE, message = "This formula corresponds to the index Cp"),
+  answer("6sd/(USL-LSL)", correct = FALSE, message = "This formula corresponds to the index Cr"),
+  answer("min{(xbar-LSL)/3sd;(USL-xbar)/3sd}", correct = TRUE, message = "This formula corresponds to the index Cpk"),
+  answer("(USL-LSL)/6sdLT", correct = FALSE, message = "This formula corresponds to the index Pp"),
+  allow_retry = TRUE
+)
+```
+
